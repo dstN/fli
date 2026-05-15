@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v2.0.0). Leave blank to use package.json version.'
+        required: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Resolve tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ github.event.inputs.tag }}" ]; then
+              echo "name=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            else
+              VERSION=$(node -p "require('./package.json').version")
+              echo "name=v$VERSION" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "name=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create git tag if needed
+        run: |
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "Not a workflow_dispatch event; skipping tag creation."
+            exit 0
+          fi
+
+          TAG="${{ steps.tag.outputs.name }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists. Skipping creation."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          if [[ "$TAG" == v* ]]; then
+            VERSION=${TAG#v}
+          else
+            VERSION=$TAG
+          fi
+          NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: false
+
+      - name: Check npm auth token
+        id: npm_auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "status=missing" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Verifying npm auth token..."
+          if npm whoami; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN is not configured. Skipping npm publish."
+            exit 0
+          fi
+
+          if [ "${{ steps.npm_auth.outputs.status }}" != "success" ]; then
+            echo "npm auth token validation failed. Skipping npm publish."
+            exit 0
+          fi
+
+          npm publish --access public
+
+      - name: Create npm token reminder issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          STATUS="${{ steps.npm_auth.outputs.status }}"
+          if [ "$STATUS" = "success" ]; then
+            echo "npm token is valid. Skipping reminder issue."
+            exit 0
+          fi
+
+          TITLE='Update npm automation token'
+          TODAY=$(date -u +'%Y-%m-%d')
+          BODY="A publish attempt for @dstn/fli on $TODAY failed because the npm automation token is missing or invalid.\n\nNPM automation tokens expire after 90 days, so please generate a new token at https://www.npmjs.com/settings/tokens and update the GitHub secret \`NPM_TOKEN\`.\n\nThis issue was created automatically by the release workflow."
+          EXISTING=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/search/issues?q=repo:$REPO+type:issue+state:open+in:title+\"Update+npm+automation+token\"" \
+            | python -c "import sys, json; obj=json.load(sys.stdin); print(obj.get('total_count', 0))")
+          if [ "$EXISTING" -eq 0 ]; then
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$REPO/issues" \
+              -d "{\"title\": \"$TITLE\", \"body\": \"$BODY\"}"
+            echo "Created issue to remind about npm token rotation."
+          else
+            echo "An open reminder issue already exists; skipping creation."
+          fi
