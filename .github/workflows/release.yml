@@ -86,13 +86,15 @@ jobs:
       - name: Check npm auth token
         id: npm_auth
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
+          if [ -z "$NPM_TOKEN" ]; then
             echo "status=missing" >> $GITHUB_OUTPUT
             exit 0
           fi
 
+          export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
           echo "Verifying npm auth token..."
           if npm whoami; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -103,9 +105,9 @@ jobs:
 
       - name: Publish to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
+          if [ -z "$NPM_TOKEN" ]; then
             echo "NPM_TOKEN is not configured. Skipping npm publish."
             exit 0
           fi
@@ -115,6 +117,8 @@ jobs:
             exit 0
           fi
 
+          export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
           npm publish --access public
 
       - name: Create npm token reminder issue
