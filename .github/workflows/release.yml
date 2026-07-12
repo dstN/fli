@@ -120,10 +120,13 @@ jobs:
           prerelease: false
 
       # ── Publish to npm ────────────────────────────────────────────────
+      # Uses npm Trusted Publishing (OIDC) via id-token: write.
+      # If NPM_TOKEN secret is present, uses it as fallback.
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
+            export NODE_AUTH_TOKEN="${{ secrets.NPM_TOKEN }}"
+          fi
           npm publish --provenance --access public || npm publish --access public
 
       # ── Create reminder issue if publish fails ────────────────────────
