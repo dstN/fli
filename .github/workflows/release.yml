@@ -45,6 +45,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      id-token: write # Required for npm Trusted Publishing (OIDC provenance)
 
     steps:
       - uses: actions/checkout@v4
@@ -123,11 +124,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::warning::NPM_TOKEN is not configured. Skipping npm publish."
-            exit 0
-          fi
-          npm publish --access public
+          npm publish --provenance --access public || npm publish --access public
 
       # ── Create reminder issue if publish fails ────────────────────────
       - name: Create token reminder issue on publish failure
