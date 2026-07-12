@@ -135,7 +135,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          EXISTING=$(gh issue list --label "npm-token" --state open --json number --jq length)
+          gh label create "npm-token" --description "npm automation token alerts" --color "E99695" 2>/dev/null || true
+          EXISTING=$(gh issue list --label "npm-token" --state open --json number --jq length 2>/dev/null || echo "0")
           if [ "$EXISTING" -eq 0 ]; then
             gh issue create \
               --title "Update npm automation token" \
