@@ -1,37 +1,42 @@
-import fs from 'fs';
+/**
+ * src/fonts.ts
+ *
+ * Core font asset resolution, multi-weight orchestration, and CSS @font-face generation.
+ *
+ * Modularized architecture:
+ *  - Network & concurrency utilities: src/utils/http.ts
+ *  - Disk caching: src/utils/cache.ts
+ *  - Binary validation & format conversions: src/utils/font-io.ts
+ *  - Resolution strategies: src/resolvers/ (gwfh, css2, official-api)
+ */
+
 import path from 'path';
-import { Font } from 'fonteditor-core';
+import { downloadBuffer, downloadToFile, pLimit } from './utils/http.js';
+import { clearCache } from './utils/cache.js';
+import {
+	isValidTtf,
+	isValidWoff2,
+	convertTtf,
+	atomicWriteFile,
+	fontFileExists,
+} from './utils/font-io.js';
+import {
+	normalizeFamily,
+	parseFormatInput,
+	parseWeightInput,
+} from './utils/normalize.js';
+import { fetchGwfhForWeight, type ResolvedFontMetadata } from './resolvers/gwfh.js';
+import { fetchFromGoogleCss } from './resolvers/css2.js';
+import { fetchFromOfficialApi } from './resolvers/official-api.js';
+
+// ---------------------------------------------------------------------------
+// Public Types & Constants
+// ---------------------------------------------------------------------------
 
 export type FontFormat = 'ttf' | 'woff2' | 'woff' | 'eot' | 'svg';
 
 export const SUPPORTED_FORMATS: FontFormat[] = ['ttf', 'woff2', 'woff', 'eot', 'svg'];
 export const FULL_FORMATS: FontFormat[] = ['ttf', 'woff2', 'woff', 'eot', 'svg'];
-
-const GOOGLE_WEBFONTS_HELPER_ENDPOINTS = ['https://google-webfonts-helper.herokuapp.com/api/fonts', 'https://gwfh.mranftl.com/api/fonts'];
-
-interface WebfontHelperListItem {
-	id: string;
-	family: string;
-}
-
-interface WebfontHelperVariant {
-	id: string;
-	fontWeight: number | string;
-	fontStyle?: string;
-	italic?: boolean;
-	files?: Record<string, string>;
-	ttf?: string;
-	woff2?: string;
-	woff?: string;
-	eot?: string;
-	svg?: string;
-}
-
-interface WebfontHelperResponse {
-	id?: string;
-	family: string;
-	variants: WebfontHelperVariant[];
-}
 
 export interface FontAsset {
 	family: string;
@@ -40,231 +45,239 @@ export interface FontAsset {
 	fileName: string;
 	publicUrl: string;
 	savedPath: string;
+	fontWeight?: number;
+	fontStyle?: string;
 }
 
-const normalizeFamily = (family: string): string =>
-	family
-		.trim()
-		.toLowerCase()
-		.replace(/\s+/g, '-')
-		.replace(/[^a-z0-9\-]/g, '');
+export { normalizeFamily, parseFormatInput, parseWeightInput, clearCache };
 
-const normalizeFormatInput = (value: string): FontFormat[] => {
-	const normalized = value
-		.split(',')
-		.map((entry) => entry.trim().toLowerCase())
-		.filter(Boolean);
+// ---------------------------------------------------------------------------
+// Hybrid Resolution Strategy Orchestration
+// ---------------------------------------------------------------------------
 
-	if (normalized.includes('full')) {
-		return FULL_FORMATS;
+const resolveFontMetadata = async (
+	family: string,
+	weight = 400,
+): Promise<ResolvedFontMetadata> => {
+	const errors: string[] = [];
+
+	try {
+		return await fetchGwfhForWeight(family, weight);
+	} catch (err) {
+		errors.push(`GWFH API: ${err instanceof Error ? err.message : String(err)}`);
 	}
 
-	const requested = normalized.map((format) => format as FontFormat).filter((format) => SUPPORTED_FORMATS.includes(format));
-	return requested.length > 0 ? requested : ['woff2'];
-};
-
-const fetchJson = async <T>(url: string): Promise<T> => {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`HTTP ${response.status} for ${url}`);
+	try {
+		return await fetchFromGoogleCss(family, weight);
+	} catch (err) {
+		errors.push(`Google CSS: ${err instanceof Error ? err.message : String(err)}`);
 	}
-	return response.json();
-};
 
-const fetchFontMetadata = async (family: string): Promise<WebfontHelperResponse> => {
-	const fontId = normalizeFamily(family);
-	const suffix = `${fontId}?subsets=latin`;
-	const listSuffix = '?sort=alpha';
-
-	for (const baseUrl of GOOGLE_WEBFONTS_HELPER_ENDPOINTS) {
+	if (process.env.GOOGLE_FONTS_API_KEY) {
 		try {
-			return await fetchJson<WebfontHelperResponse>(`${baseUrl}/${suffix}`);
-		} catch {
-			continue;
+			return await fetchFromOfficialApi(family, weight);
+		} catch (err) {
+			errors.push(`Official API: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	}
 
-	for (const baseUrl of GOOGLE_WEBFONTS_HELPER_ENDPOINTS) {
-		try {
-			const list = await fetchJson<WebfontHelperListItem[]>(`${baseUrl}/${listSuffix}`);
-			const match = list.find((item) => item.id === fontId || normalizeFamily(item.family) === fontId);
-			if (match) {
-				return await fetchJson<WebfontHelperResponse>(`${baseUrl}/${match.id}?subsets=latin`);
-			}
-		} catch {
-			continue;
-		}
-	}
-
-	throw new Error(`Unable to retrieve metadata for font family "${family}" from the Google Webfonts Helper API.`);
+	throw new Error(
+		`Unable to retrieve metadata for font "${family}" (weight ${weight}). Attempted sources failed:\n` +
+			errors.map((e) => `  • ${e}`).join('\n'),
+	);
 };
 
-const parseFontWeight = (weight: number | string): number => (typeof weight === 'string' ? Number(weight.replace(/[^0-9]/g, '')) : weight);
+// ---------------------------------------------------------------------------
+// Single Family Processing
+// ---------------------------------------------------------------------------
 
-const isItalicVariant = (variant: WebfontHelperVariant): boolean => variant.italic === true || variant.fontStyle === 'italic';
-
-const selectVariant = (payload: WebfontHelperResponse): WebfontHelperVariant => {
-	const regular = payload.variants.find((variant) => parseFontWeight(variant.fontWeight) === 400 && !isItalicVariant(variant));
-	return regular ?? payload.variants[0];
-};
-
-const formatToCssFormat = (format: FontFormat): string => {
-	switch (format) {
-		case 'woff2':
-			return 'woff2';
-		case 'woff':
-			return 'woff';
-		case 'ttf':
-			return 'truetype';
-		case 'eot':
-			return 'embedded-opentype';
-		case 'svg':
-			return 'svg';
-		default:
-			return format;
-	}
-};
-
-const ensureBuffer = (value: ArrayBuffer | Buffer | Uint8Array): Buffer => (Buffer.isBuffer(value) ? value : Buffer.from(value instanceof Uint8Array ? value : new Uint8Array(value)));
-
-const convertTtfToWoff2 = (ttfBuffer: Buffer): Buffer => {
-	const font = Font.create(ttfBuffer, { type: 'ttf' });
-	const output = font.write({ type: 'woff2' });
-	return ensureBuffer(output);
-};
-
-const convertTtfToWoff = (ttfBuffer: Buffer): Buffer => {
-	const font = Font.create(ttfBuffer, { type: 'ttf' });
-	const output = font.write({ type: 'woff' });
-	return ensureBuffer(output);
-};
-
-const convertTtfToEot = (ttfBuffer: Buffer): Buffer => {
-	const font = Font.create(ttfBuffer, { type: 'ttf' });
-	const output = font.write({ type: 'eot' });
-	return ensureBuffer(output);
-};
-
-const convertTtfToSvg = (ttfBuffer: Buffer, family: string): Buffer => {
-	const font = Font.create(ttfBuffer, { type: 'ttf' });
-	const output = font.write({ type: 'svg', fontFamily: family, fullName: family });
-	return ensureBuffer(output);
-};
-
-const possiblyDownload = async (url: string): Promise<Buffer> => {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`Failed to download font asset from ${url}`);
-	}
-	const arrayBuffer = await response.arrayBuffer();
-	return Buffer.from(arrayBuffer);
-};
-
-const createFileName = (normalizedFamily: string, variantKey: string, format: FontFormat): string => `${normalizedFamily}-${variantKey}.${format}`;
-
-const normalizePublicUrlBase = (base: string): string => {
-	const trimmed = base.trim().replace(/\/+$|^\/+/, '');
-	return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-};
-
-const chooseVariantKey = (variant: WebfontHelperVariant): string => {
-	if (variant.fontWeight === 400 && !variant.italic) {
-		return 'regular';
-	}
-	return variant.italic ? `${variant.fontWeight}italic` : `${variant.fontWeight}`;
-};
-
-export const parseFormatInput = (input: string): FontFormat[] => normalizeFormatInput(input);
-
-export const downloadFontAssets = async (families: string[], formats: FontFormat[], outputDir: string, publicUrlBase: string): Promise<FontAsset[]> => {
+const processSingleFamily = async (
+	family: string,
+	formats: FontFormat[],
+	weights: number[],
+	outputDir: string,
+	publicUrlBase: string,
+	dryRun: boolean,
+): Promise<FontAsset[]> => {
+	const normalizedFamily = normalizeFamily(family);
 	const result: FontAsset[] = [];
-	await fs.promises.mkdir(outputDir, { recursive: true });
 
-	const normalizedPublicUrlBase = normalizePublicUrlBase(publicUrlBase);
-
-	for (const family of families) {
-		const metadata = await fetchFontMetadata(family);
-		const variant = selectVariant(metadata);
-		const normalizedFamily = normalizeFamily(family);
-		const variantKey = chooseVariantKey(variant);
-
-		const directUrls = variant.files ?? {
-			ttf: variant.ttf,
-			woff2: variant.woff2,
-			woff: variant.woff,
-			eot: variant.eot,
-			svg: variant.svg,
-		};
+	for (const weight of weights) {
+		const metadata = await resolveFontMetadata(family, weight);
 		let ttfBuffer: Buffer | null = null;
 
 		for (const format of formats) {
-			const fileName = createFileName(normalizedFamily, variantKey, format);
+			const weightSuffix = weight === 400 ? 'regular' : String(weight);
+			const fileName = `${normalizedFamily}-${weightSuffix}.${format}`;
+			const publicUrl = `${publicUrlBase.replace(/\/$/, '')}/${fileName}`;
 			const savedPath = path.join(outputDir, fileName);
-			const publicUrl = `${normalizedPublicUrlBase}/${fileName}`;
 
-			if (directUrls[format]) {
-				const downloaded = await possiblyDownload(directUrls[format]);
-				await fs.promises.writeFile(savedPath, downloaded);
-				result.push({ family, normalizedFamily, format, fileName, publicUrl, savedPath });
+			if (!dryRun && (await fontFileExists(savedPath))) {
+				result.push({
+					family,
+					normalizedFamily,
+					format,
+					fileName,
+					publicUrl,
+					savedPath,
+					fontWeight: metadata.fontWeight,
+					fontStyle: metadata.fontStyle,
+				});
 				continue;
 			}
 
-			if (!ttfBuffer && directUrls.ttf) {
-				ttfBuffer = await possiblyDownload(directUrls.ttf);
+			const directUrl = metadata.urls[format];
+
+			if (directUrl) {
+				if (!dryRun) {
+					await downloadToFile(directUrl, savedPath);
+				}
+				result.push({
+					family,
+					normalizedFamily,
+					format,
+					fileName,
+					publicUrl,
+					savedPath,
+					fontWeight: metadata.fontWeight,
+					fontStyle: metadata.fontStyle,
+				});
+				continue;
 			}
 
 			if (!ttfBuffer) {
-				throw new Error(`Unable to fetch TTF base font for "${family}" and derive missing formats.`);
+				const ttfUrl = metadata.urls['ttf'];
+				if (!ttfUrl) {
+					throw new Error(
+						`Unable to fetch TTF base font for "${family}" weight ${weight} to derive missing formats.`,
+					);
+				}
+				ttfBuffer = await downloadBuffer(ttfUrl);
+				if (!isValidTtf(ttfBuffer)) {
+					throw new Error(
+						`Downloaded TTF for "${family}" appears corrupted. ` +
+							`Try re-running fli or downloading the font manually from https://fonts.google.com`,
+					);
+				}
 			}
 
-			let outputBuffer: Buffer;
-			switch (format) {
-				case 'woff2':
-					outputBuffer = convertTtfToWoff2(ttfBuffer);
-					break;
-				case 'woff':
-					outputBuffer = convertTtfToWoff(ttfBuffer);
-					break;
-				case 'eot':
-					outputBuffer = convertTtfToEot(ttfBuffer);
-					break;
-				case 'svg':
-					outputBuffer = convertTtfToSvg(ttfBuffer, family);
-					break;
-				case 'ttf':
-					outputBuffer = ttfBuffer;
-					break;
-				default:
-					throw new Error(`Format conversion not supported for ${format}`);
+			if (format === 'ttf') {
+				if (!dryRun) await atomicWriteFile(savedPath, ttfBuffer);
+			} else {
+				const converted = await convertTtf(ttfBuffer, format, family);
+
+				if (format === 'woff2' && !isValidWoff2(converted)) {
+					throw new Error(`WOFF2 conversion for "${family}" produced an invalid file.`);
+				}
+
+				if (!dryRun) await atomicWriteFile(savedPath, converted);
 			}
 
-			await fs.promises.writeFile(savedPath, outputBuffer);
-			result.push({ family, normalizedFamily, format, fileName, publicUrl, savedPath });
+			result.push({
+				family,
+				normalizedFamily,
+				format,
+				fileName,
+				publicUrl,
+				savedPath,
+				fontWeight: metadata.fontWeight,
+				fontStyle: metadata.fontStyle,
+			});
 		}
 	}
 
 	return result;
 };
 
+// ---------------------------------------------------------------------------
+// downloadFontAssets
+// ---------------------------------------------------------------------------
+
+export const downloadFontAssets = async (
+	families: string[],
+	formats: FontFormat[],
+	weights: number[] = [400],
+	outputDir: string,
+	publicUrlBase: string,
+	dryRun = false,
+): Promise<FontAsset[]> => {
+	const limit = pLimit(4);
+
+	const outcomes = await Promise.allSettled(
+		families.map((family) =>
+			limit(() =>
+				processSingleFamily(family, formats, weights, outputDir, publicUrlBase, dryRun),
+			),
+		),
+	);
+
+	const assets: FontAsset[] = [];
+	const failures: string[] = [];
+
+	outcomes.forEach((outcome, idx) => {
+		if (outcome.status === 'fulfilled') {
+			assets.push(...outcome.value);
+		} else {
+			const reason =
+				outcome.reason instanceof Error
+					? outcome.reason.message
+					: String(outcome.reason);
+			failures.push(`[${families[idx]}]: ${reason}`);
+		}
+	});
+
+	if (failures.length > 0) {
+		throw new Error(
+			`Failed to download ${failures.length} font(s):\n` +
+				failures.map((f) => `  • ${f}`).join('\n'),
+		);
+	}
+
+	return assets;
+};
+
+// ---------------------------------------------------------------------------
+// createFontFaceDeclarations
+// ---------------------------------------------------------------------------
+
+const FORMAT_CSS_NAMES: Record<FontFormat, string> = {
+	woff2: 'woff2',
+	woff: 'woff',
+	ttf: 'truetype',
+	eot: 'embedded-opentype',
+	svg: 'svg',
+};
+
 export const createFontFaceDeclarations = (assets: FontAsset[]): string => {
-	const groups = assets.reduce<Record<string, FontAsset[]>>((acc, asset) => {
-		acc[asset.family] = acc[asset.family] ?? [];
-		acc[asset.family].push(asset);
-		return acc;
-	}, {});
+	const groups = new Map<string, FontAsset[]>();
 
-	return Object.entries(groups)
-		.map(([family, group]) => {
-			const ordered = [...group].sort((left, right) => SUPPORTED_FORMATS.indexOf(left.format) - SUPPORTED_FORMATS.indexOf(right.format));
-			const sources = ordered.map((asset) => `  url('${asset.publicUrl}') format('${formatToCssFormat(asset.format)}')`).join(',\n');
+	for (const asset of assets) {
+		const weight = asset.fontWeight ?? 400;
+		const style = asset.fontStyle ?? 'normal';
+		const key = `${asset.family}|${weight}|${style}`;
 
-			return `@font-face {
-  font-family: '${family}';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: ${sources};
-}`;
+		const existing = groups.get(key) ?? [];
+		existing.push(asset);
+		groups.set(key, existing);
+	}
+
+	return Array.from(groups.values())
+		.map((groupAssets) => {
+			const first = groupAssets[0]!;
+			const sorted = [...groupAssets].sort(
+				(a, b) =>
+					SUPPORTED_FORMATS.indexOf(a.format) - SUPPORTED_FORMATS.indexOf(b.format),
+			);
+
+			const sources = sorted
+				.map((asset) => {
+					const url = asset.publicUrl.replace(/\\/g, '/');
+					const cssFormat = FORMAT_CSS_NAMES[asset.format];
+					return `url('${url}') format('${cssFormat}')`;
+				})
+				.join(',\n  ');
+
+			return `@font-face {\n  font-family: '${first.family}';\n  font-style: ${first.fontStyle ?? 'normal'};\n  font-weight: ${first.fontWeight ?? 400};\n  font-display: swap;\n  src: ${sources};\n}`;
 		})
 		.join('\n\n');
 };

@@ -1,13 +1,15 @@
 {
   "name": "@dstn/fli",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Fonts Local Importer CLI for GDPR-compliant local Google Fonts delivery.",
   "main": "dist/index.js",
-  "files": ["dist"],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "fli": "dist/index.js"
   },
-  "type": "commonjs",
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/dstN/fli.git"
@@ -24,7 +26,10 @@
     "dev": "tsup --watch",
     "prepare": "npm run build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "release": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "fonts",
@@ -45,6 +50,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.8.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.6"

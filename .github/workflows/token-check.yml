@@ -1,0 +1,31 @@
+name: Token Expiry Check
+
+on:
+  schedule:
+    # Run on the 1st of every month at 09:00 UTC
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+jobs:
+  check-tokens:
+    name: Reminder & Token Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check npm token presence
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN secret is not set or empty. Please ensure an active publishing token is configured."
+          else
+            echo "NPM_TOKEN secret is present."
+          fi
+
+      - name: Token maintenance notice
+        run: |
+          echo "================================================================="
+          echo "REMINDER: Verify expiration dates for repository secrets:"
+          echo "  • NPM_TOKEN (npm package publishing)"
+          echo "  • GOOGLE_FONTS_API_KEY (optional official API fallback)"
+          echo "================================================================="

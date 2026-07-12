@@ -1,0 +1,26 @@
+{
+  "id": "inter",
+  "family": "Inter",
+  "subsets": ["latin", "latin-ext"],
+  "category": "sans-serif",
+  "version": "v13",
+  "lastModified": "2024-01-01",
+  "variants": [
+    {
+      "id": "400",
+      "fontWeight": "400",
+      "fontStyle": "normal",
+      "ttf": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-regular.ttf",
+      "woff": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-regular.woff",
+      "woff2": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-regular.woff2"
+    },
+    {
+      "id": "700",
+      "fontWeight": "700",
+      "fontStyle": "normal",
+      "ttf": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-700.ttf",
+      "woff": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-700.woff",
+      "woff2": "https://gwfh.mranftl.com/api/fonts/inter/v13/inter-v13-latin-700.woff2"
+    }
+  ]
+}
