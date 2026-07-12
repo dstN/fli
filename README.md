@@ -100,8 +100,7 @@ This repository includes fully automated CI/CD workflows for testing and publish
   1. Runs clean installation (`npm ci`), type checks, and full unit test verification (`npm test`).
   2. Resolves the release tag from input or `package.json` version and creates/pushes the git tag automatically.
   3. Extracts release notes from `CHANGELOG.md` and generates an official GitHub Release via the GitHub CLI (`gh`).
-  4. Automatically publishes `@dstn/fli` to the **npm registry** with cryptographic provenance (`npm publish --provenance --access public`) using **npm Trusted Publishing (OIDC)** or `NPM_TOKEN`.
-- **NPM Token Guardian (`.github/workflows/token-check.yml`)**: For workflows using traditional automation tokens (`NPM_TOKEN`), this cron workflow runs monthly to verify token validity and alerts maintainers before expiration. (Note: Using npm Trusted Publishing OIDC bypasses token expiration and 2FA restrictions entirely).
+  4. Automatically publishes `@dstn/fli` to the **npm registry** with cryptographic provenance (`npm publish --provenance --access public`) using **100% tokenless npm Trusted Publishing (OIDC)**. No expiring tokens or secrets required.
 
 ---
 

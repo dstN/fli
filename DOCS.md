@@ -152,20 +152,15 @@ Provide `--framework vanilla --css <path-to-css>` and `fli` will store assets un
 
 ## 7. CI/CD & NPM Automatic Publishing
 
-The repository includes three specialized GitHub Actions workflows located in `.github/workflows/`:
+The repository includes two specialized GitHub Actions workflows located in `.github/workflows/`:
 
 1. **`ci.yml` (Continuous Integration)**
    - Runs on every push to `master` and pull request.
    - Executes TypeScript type checking (`npm run typecheck`), production bundling (`npm run build`), and the full Vitest suite (`npm test`).
 
-2. **`release.yml` (Automated GitHub & NPM Publishing)**
-   - Triggered via `workflow_dispatch` or git tag push (`v*`).
+2. **`release.yml` (Automated GitHub & NPM Trusted Publishing)**
+   - Triggered via `workflow_dispatch` or git tag push (`v*`, `*.*.*`).
    - Runs clean verification (`npm ci && npm test`).
    - Extracts the latest version section from `CHANGELOG.md` to create a GitHub Release using the official `gh` CLI.
-   - Publishes `@dstn/fli` to the public npm registry using the `NPM_TOKEN` repository secret.
-
-3. **`token-check.yml` (NPM Token Guardian)**
-   - Runs automatically on the 1st of every month.
-   - Verifies whether the configured `NPM_TOKEN` is still valid (`npm whoami`).
-   - If an automation token has expired or is nearing its 90-day expiration window, it automatically creates a high-priority GitHub issue alerting maintainers to renew the token.
+   - Uses **npm Trusted Publishing (OIDC)** (`id-token: write`) to publish `@dstn/fli` to the public npm registry with cryptographic provenance attestation (`npm publish --provenance --access public`), requiring zero static tokens or secrets.
 

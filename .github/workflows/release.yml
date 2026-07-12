@@ -119,29 +119,6 @@ jobs:
           draft: false
           prerelease: false
 
-      # ── Publish to npm ────────────────────────────────────────────────
-      # Uses npm Trusted Publishing (OIDC) via id-token: write.
-      # If NPM_TOKEN secret is present, uses it as fallback.
+      # ── Publish to npm via Trusted Publishing (OIDC) ──────────────────
       - name: Publish to npm
-        run: |
-          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
-            export NODE_AUTH_TOKEN="${{ secrets.NPM_TOKEN }}"
-          fi
-          npm publish --provenance --access public || npm publish --access public
-
-      # ── Create reminder issue if publish fails ────────────────────────
-      - name: Create token reminder issue on publish failure
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create "npm-token" --description "npm automation token alerts" --color "E99695" 2>/dev/null || true
-          EXISTING=$(gh issue list --label "npm-token" --state open --json number --jq length 2>/dev/null || echo "0")
-          if [ "$EXISTING" -eq 0 ]; then
-            gh issue create \
-              --title "Update npm automation token" \
-              --label "npm-token" \
-              --body "npm publish failed on $(date -u +'%Y-%m-%d'). Regenerate the token at https://www.npmjs.com/settings/tokens and update the \`NPM_TOKEN\` GitHub secret. npm automation tokens expire after 90 days."
-          else
-            echo "A reminder issue already exists; skipping."
-          fi
+        run: npm publish --provenance --access public

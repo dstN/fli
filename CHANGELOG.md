@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - **Atomic File Operations**: Exclusive file creation (`flag: 'wx'`) preventing TOCTOU races and write-then-rename updates preventing partial/corrupted output files.
 - **Cross-Platform Compatibility**: Fully verified cross-platform path resolution across Windows (`\`), macOS, and Linux (`/`).
 - **Comprehensive Documentation**: Added detailed `DOCS.md` architectural reference and updated `README.md`.
-- **Automated Maintenance CI/CD**: Added `.github/workflows/ci.yml` matrix testing and `.github/workflows/token-check.yml` automated monthly expiry reminder.
+- **Automated CI/CD & Trusted Publishing**: Added `.github/workflows/ci.yml` matrix testing and migrated release workflow to 100% tokenless **npm Trusted Publishing (OIDC)** with cryptographic provenance attestation (`--provenance`).
 
 ### Changed
 - **Major Architecture Rewrite**: Refactored monolithic codebase into clean single-responsibility modules adhering to SRP across `src/cli/`, `src/resolvers/`, and `src/utils/`.
