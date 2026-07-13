@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-07-13
+
+### Changed
+- **NPM Trusted Publishing (OIDC)**: Upgraded release pipeline (`.github/workflows/release.yml`) to use 100% tokenless OpenID Connect (OIDC) authentication (`id-token: write`) for publishing `@dstn/fli` with cryptographic provenance attestation (`npm publish --provenance`).
+- **Clean Documentation**: Updated `README.md` and `DOCS.md` with Trusted Publishing setup guidance and removed legacy token expiration check workflows.
+
 ## [2.0.0] - 2026-07-13
 
 ### Added

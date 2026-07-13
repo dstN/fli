@@ -1,6 +1,6 @@
 {
   "name": "@dstn/fli",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Fonts Local Importer CLI for GDPR-compliant local Google Fonts delivery.",
   "main": "dist/index.js",
   "type": "module",
