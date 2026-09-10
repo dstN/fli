@@ -4,7 +4,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](https://nodejs.org/)
 
-`@dstn/fli` is a production-grade Node.js CLI tool that automatically downloads Google Webfonts locally into your web project and injects optimized `@font-face` CSS declarations.
+`@dstn/fli` downloads Google Webfonts into your project and writes the matching `@font-face` CSS, so your pages serve fonts from your own domain instead of Google's.
 
 Designed specifically for **GDPR compliance**, zero-layout-shift web performance, and modern framework architectures (**Next.js**, **Nuxt.js**, **Vite**, and **Vanilla CSS**).
 
@@ -20,7 +20,7 @@ Loading web fonts directly from Google CDNs (`fonts.googleapis.com`) transmits y
 
 ## Key Features
 
-- **Interactive Terminal Wizard**: Beautiful CLI experience powered by `@clack/prompts`.
+- **Interactive Terminal Wizard**: Prompts built on `@clack/prompts`.
 - **Framework Aware**: Automatically detects **Next.js**, **Nuxt.js**, and **Vite** from your `package.json` and targets official static asset directories (`public/fonts`, etc.).
 - **Multi-Weight & Style Support**: Download and bundle multiple weights (`300`, `400`, `500`, `600`, `700`) and italic variants in one pass.
 - **Atomic I/O & Rollback Recovery**: Never leaves corrupted or partial CSS files behind. Automatically restores original CSS files if an error occurs.
@@ -107,7 +107,7 @@ This repository includes fully automated CI/CD workflows for testing and publish
 ## Documentation & Deep Dive
 
 Looking for detailed architectural diagrams, API fallback details, or troubleshooting guides?
-Check out our **[Comprehensive Documentation Guide (DOCS.md)](DOCS.md)**.
+Full documentation is in [DOCS.md](DOCS.md).
 
 ---
 
