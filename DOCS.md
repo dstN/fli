@@ -155,7 +155,7 @@ Pass `--framework vanilla --css <path-to-css>`. `fli` stores the files under `pu
 There are two GitHub Actions workflows in `.github/workflows/`:
 
 1. `ci.yml` (Continuous Integration)
-   - Runs on every push to `master` and on pull requests.
+   - Runs on every push to `master` and on pull requests against it.
    - Runs the TypeScript type check (`npm run typecheck`), the production build (`npm run build`) and the Vitest suite (`npm test`).
 
 2. `release.yml` (GitHub Release and npm publishing)

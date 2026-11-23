@@ -95,7 +95,7 @@ npx @dstn/fli \
 
 Two GitHub workflows test and publish the package.
 
-`.github/workflows/ci.yml` runs type checking, linting, the build and the tests (`node24`) on every push and pull request.
+`.github/workflows/ci.yml` runs type checking, linting, the build and the tests (`node24`) on every push to `master` and on pull requests against it.
 
 `.github/workflows/release.yml` starts on a new tag or by hand. It:
   1. Installs with `npm ci`, type checks and runs the unit tests (`npm test`).

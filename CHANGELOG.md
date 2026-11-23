@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - `README.md`, `DOCS.md` and this changelog describe what the tool does in plain terms; bold labels on every bullet, dashes and marketing phrases are gone. No behaviour changed.
 
+### Fixed
+- `.github/workflows/ci.yml` only ran for `main`, a branch this repository does not have, so pushes to `master` and pull requests against it were never checked. It runs for `master` now, and README and DOCS say so.
+
 ## [2.0.1] - 2026-07-13
 
 ### Changed
