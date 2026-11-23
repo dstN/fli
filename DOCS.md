@@ -1,6 +1,6 @@
-# `@dstn/fli` — Technical Documentation & Reference Manual
+# `@dstn/fli` Technical Documentation
 
-Welcome to the comprehensive technical documentation for `@dstn/fli` (v2.0.0). This document covers our modular architecture, font resolution fallback strategies, atomic filesystem operations, programmatic API, and troubleshooting guidelines.
+Technical documentation for `@dstn/fli` (v2.0.0): module layout, how font metadata is resolved, atomic file writes, the programmatic API and troubleshooting.
 
 ---
 
@@ -16,7 +16,7 @@ Welcome to the comprehensive technical documentation for `@dstn/fli` (v2.0.0). T
 
 ## 1. Architecture Overview
 
-`@dstn/fli` is engineered around the **Single Responsibility Principle (SRP)**. Business logic is strictly decoupled from interactive CLI prompts and process lifecycle controls.
+Each module in `@dstn/fli` has one job (Single Responsibility Principle). The core logic does not depend on the interactive prompts or on process lifecycle handling.
 
 ```mermaid
 graph TD
@@ -39,16 +39,16 @@ graph TD
 
 ### Module Directory Breakdown
 
-- **`src/cli/`**: Interactive `@clack/prompts` wizard and argument parser (`node:util parseArgs`).
-- **`src/core.ts`**: Pure orchestration layer (`executeFli`). Handles automatic backup creation and rollback recovery.
-- **`src/resolvers/`**: Pluggable font metadata resolvers.
-- **`src/utils/`**: Shared utilities for network retries, concurrency limiting, disk caching, font magic-byte checking, and CSS inspection.
+- `src/cli/`: the `@clack/prompts` wizard and the argument parser (`node:util parseArgs`).
+- `src/core.ts`: the orchestration layer (`executeFli`). It creates the backup and rolls back on errors.
+- `src/resolvers/`: interchangeable font metadata resolvers.
+- `src/utils/`: network retries, concurrency limiting, disk caching, font magic-byte checks and CSS inspection.
 
 ---
 
 ## 2. Hybrid Font Resolution Chain
 
-To ensure high availability and prevent build-time failures, `fli` resolves font metadata through a **3-tier hybrid fallback chain**:
+So that a single unreachable API does not break a build, `fli` tries three sources for font metadata:
 
 ```
            ┌──────────────────────────────────────────────┐
@@ -66,41 +66,41 @@ To ensure high availability and prevent build-time failures, `fli` resolves font
            └──────────────────────────────────────────────┘
 ```
 
-1. **Google Webfonts Helper (`gwfh.mranftl.com`)**: Provides direct binary URLs for all formats (`woff2`, `woff`, `ttf`, `eot`, `svg`) along with weight and style metadata. Responses are cached locally in `~/.cache/fli/` for 24 hours.
-2. **Google Fonts CSS2 Parser (`fonts.googleapis.com/css2`)**: If the primary helper API is unreachable, `fli` sends a request with a modern User-Agent to Google's official CSS2 endpoint and parses `@font-face` URL declarations.
-3. **Official Google Fonts Webfonts API v1**: If `GOOGLE_FONTS_API_KEY` is present in the environment, `fli` queries the official v1 API endpoint as a last-resort fallback.
+1. Google Webfonts Helper (`gwfh.mranftl.com`) returns direct binary URLs for all formats (`woff2`, `woff`, `ttf`, `eot`, `svg`) with weight and style metadata. Responses are cached in `~/.cache/fli/` for 24 hours.
+2. Google Fonts CSS2 Parser (`fonts.googleapis.com/css2`): if the helper API is unreachable, `fli` requests Google's official CSS2 endpoint with a modern User-Agent and parses the URLs in the `@font-face` declarations.
+3. Official Google Fonts Webfonts API v1: if `GOOGLE_FONTS_API_KEY` is set in the environment, `fli` queries the official v1 API as the last option.
 
 ---
 
 ## 3. Format Derivation Engine
 
-When a requested format (such as legacy `woff`, `eot`, or `svg`) is not directly available from the upstream resolver, `fli` automatically fetches the base TrueType (`ttf`) font and converts it locally using **`fonteditor-core`**.
+If the resolver does not offer a requested format (such as legacy `woff`, `eot`, or `svg`), `fli` downloads the TrueType (`ttf`) font and converts it locally with `fonteditor-core`.
 
 ### Magic Byte Validation
-Before converting or saving font files, `fli` validates file headers:
-- **TrueType (`TTF`)**: Verifies `0x00010000` or `OTTO` (`0x4f54544f`) magic signatures.
-- **WOFF2**: Verifies `wOF2` (`0x774f4632`) magic signature.
+Before converting or saving font files, `fli` checks their headers:
+- TrueType (`TTF`) files must start with `0x00010000` or `OTTO` (`0x4f54544f`).
+- WOFF2 files must start with `wOF2` (`0x774f4632`).
 
 ---
 
 ## 4. Atomic I/O & Rollback Guarantee
 
-`fli` guarantees that your repository never ends up in a corrupted or half-injected state during automated runs.
+An automated run never leaves your repository with corrupted files or half-injected CSS.
 
 ### TOCTOU Prevention
-When creating target CSS files (`ensureCssFile`), `fli` uses exclusive filesystem flags (`flag: 'wx'`) to prevent Time-of-Check to Time-of-Use race conditions across concurrent processes.
+When `fli` creates a target CSS file (`ensureCssFile`), it opens it with the exclusive flag (`flag: 'wx'`), so concurrent processes cannot race between the existence check and the write (Time-of-Check to Time-of-Use).
 
 ### Atomic File Writes
-Font files and stylesheets are written to temporary files (`.tmp`) inside the destination folder and atomically renamed (`fs.promises.rename`) over the target file once write completion is verified.
+Font files and stylesheets go to temporary files (`.tmp`) in the destination folder first. Once the write has completed, `fs.promises.rename` replaces the target file in one step.
 
 ### Automatic Rollback
-Before modifying your CSS stylesheet, `executeFli` creates a snapshot backup (`.fli-backup`). If any font download fails or `@font-face` injection throws an error, the original stylesheet is automatically restored.
+Before it changes your stylesheet, `executeFli` saves a copy (`.fli-backup`). If a font download fails or the `@font-face` injection throws, the original stylesheet is restored.
 
 ---
 
 ## 5. Programmatic API Reference (`executeFli`)
 
-You can invoke `fli` programmatically in Node.js or build scripts without launching CLI prompts:
+Node.js code and build scripts can call `fli` directly, without prompts:
 
 ```typescript
 import { executeFli, type FliOptions, type FliResult } from '@dstn/fli/core';
@@ -136,31 +136,31 @@ interface FliResult {
 ## 6. Troubleshooting & FAQ
 
 ### Q: I am receiving `HTTP 429` rate limit errors during heavy builds.
-`fli` automatically handles `HTTP 429` responses by inspecting `Retry-After` headers and applying exponential backoff across 3 retries. If rate limits persist, ensure parallel builds share the local cache directory (`~/.cache/fli/`).
+On `HTTP 429`, `fli` reads the `Retry-After` header and retries up to 3 times with exponential backoff. If the limit keeps hitting, let parallel builds share the cache directory (`~/.cache/fli/`).
 
 ### Q: How do I clear the local metadata cache?
-You can clear cached API responses programmatically via `clearCache()`:
+Call `clearCache()`:
 ```typescript
 import { clearCache } from '@dstn/fli';
 await clearCache();
 ```
 
 ### Q: How do I specify a custom asset path for Vanilla projects?
-Provide `--framework vanilla --css <path-to-css>` and `fli` will store assets under `public/fonts` and reference them as `/fonts/<filename>`.
+Pass `--framework vanilla --css <path-to-css>`. `fli` stores the files under `public/fonts` and references them as `/fonts/<filename>`.
 
 ---
 
 ## 7. CI/CD & NPM Automatic Publishing
 
-The repository includes two specialized GitHub Actions workflows located in `.github/workflows/`:
+There are two GitHub Actions workflows in `.github/workflows/`:
 
-1. **`ci.yml` (Continuous Integration)**
-   - Runs on every push to `master` and pull request.
-   - Executes TypeScript type checking (`npm run typecheck`), production bundling (`npm run build`), and the full Vitest suite (`npm test`).
+1. `ci.yml` (Continuous Integration)
+   - Runs on every push to `master` and on pull requests.
+   - Runs the TypeScript type check (`npm run typecheck`), the production build (`npm run build`) and the Vitest suite (`npm test`).
 
-2. **`release.yml` (Automated GitHub & NPM Trusted Publishing)**
-   - Triggered via `workflow_dispatch` or git tag push (`v*`, `*.*.*`).
-   - Runs clean verification (`npm ci && npm test`).
-   - Extracts the latest version section from `CHANGELOG.md` to create a GitHub Release using the official `gh` CLI.
-   - Uses **npm Trusted Publishing (OIDC)** (`id-token: write`) to publish `@dstn/fli` to the public npm registry with cryptographic provenance attestation (`npm publish --provenance --access public`), requiring zero static tokens or secrets.
+2. `release.yml` (GitHub Release and npm publishing)
+   - Starts via `workflow_dispatch` or when a git tag is pushed (`v*`, `*.*.*`).
+   - Installs and tests from scratch (`npm ci && npm test`).
+   - Takes the latest version section from `CHANGELOG.md` and creates a GitHub Release with the `gh` CLI.
+   - Publishes `@dstn/fli` to the public npm registry with a provenance attestation (`npm publish --provenance --access public`) through npm Trusted Publishing (OIDC, `id-token: write`), so no static token or secret is needed.
 

@@ -1,4 +1,4 @@
-# @dstn/fli — Fonts Local Importer CLI
+# @dstn/fli: Fonts Local Importer CLI
 
 [![GDPR Compliant](https://img.shields.io/badge/GDPR-100%25%20Compliant-success.svg)](#why-local-fonts)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
@@ -6,7 +6,7 @@
 
 `@dstn/fli` downloads Google Webfonts into your project and writes the matching `@font-face` CSS, so your pages serve fonts from your own domain instead of Google's.
 
-Designed specifically for **GDPR compliance**, zero-layout-shift web performance, and modern framework architectures (**Next.js**, **Nuxt.js**, **Vite**, and **Vanilla CSS**).
+It is built for GDPR compliance and works with Next.js, Nuxt.js, Vite and plain CSS projects.
 
 ---
 
@@ -14,22 +14,22 @@ Designed specifically for **GDPR compliance**, zero-layout-shift web performance
 
 Loading web fonts directly from Google CDNs (`fonts.googleapis.com`) transmits your visitors' IP addresses to third-party servers. Under European GDPR privacy rulings (such as the Munich Regional Court ruling), linking external web fonts without explicit visitor consent violates privacy regulations.
 
-`@dstn/fli` eliminates this risk completely by hosting Google Fonts directly from your own domain.
+With `@dstn/fli` the font files sit on your own domain, so no visitor request goes to Google.
 
 ---
 
-## Key Features
+## Features
 
-- **Interactive Terminal Wizard**: Prompts built on `@clack/prompts`.
-- **Framework Aware**: Automatically detects **Next.js**, **Nuxt.js**, and **Vite** from your `package.json` and targets official static asset directories (`public/fonts`, etc.).
-- **Multi-Weight & Style Support**: Download and bundle multiple weights (`300`, `400`, `500`, `600`, `700`) and italic variants in one pass.
-- **Atomic I/O & Rollback Recovery**: Never leaves corrupted or partial CSS files behind. Automatically restores original CSS files if an error occurs.
-- **Hybrid API Fallback Chain**: Resolves font metadata reliably across three fallback layers:
+- An interactive terminal wizard built on `@clack/prompts`.
+- Detects Next.js, Nuxt.js and Vite from your `package.json` and writes to the framework's official static asset directory (`public/fonts`, etc.).
+- Downloads several weights (`300`, `400`, `500`, `600`, `700`) and italic variants in one pass.
+- Writes files atomically, so a failed run leaves no corrupted or partial CSS behind. If an error occurs, the original CSS files are restored.
+- Looks up font metadata in three places, in this order:
   1. Google Webfonts Helper API (`gwfh.mranftl.com`)
   2. Google Fonts CSS2 Parser (`fonts.googleapis.com/css2`)
   3. Official Google Fonts Webfonts API v1 (`GOOGLE_FONTS_API_KEY`)
-- **WebAssembly Format Derivation**: Missing WOFF2, WOFF, EOT, or SVG formats are automatically converted from source TrueType binaries using `fonteditor-core`.
-- **CI / Non-Interactive Mode**: Fully scriptable flags (`--font`, `--format`, `--weight`, `--framework`, `--css`).
+- If WOFF2, WOFF, EOT or SVG is missing, `fonteditor-core` (WebAssembly) converts it from the TrueType source.
+- Every prompt has a flag (`--font`, `--format`, `--weight`, `--framework`, `--css`), so it runs in CI without interaction.
 
 ---
 
@@ -42,17 +42,17 @@ npx @dstn/fli
 ```
 
 ### Interactive Flow
-1. **Font Families**: Enter comma-separated font names (e.g. `Inter, Roboto`).
-2. **Formats**: Choose formats to bundle (`woff2` recommended for modern browsers, or `full` for legacy support).
-3. **Weights**: Select weights (`300`, `400`, `700`, etc.).
-4. **Framework**: Confirm auto-detected framework (`Next.js`, `Nuxt.js`, `Vite`, or `Vanilla`).
-5. **CSS Target**: Confirm or customize target stylesheet path (`src/app/globals.css`, etc.).
+1. Font families: enter comma-separated font names (e.g. `Inter, Roboto`).
+2. Formats: `woff2` is enough for modern browsers, `full` adds the legacy formats.
+3. Weights: select weights (`300`, `400`, `700`, etc.).
+4. Framework: confirm the detected framework (`Next.js`, `Nuxt.js`, `Vite`, or `Vanilla`).
+5. CSS target: confirm or change the stylesheet path (`src/app/globals.css`, etc.).
 
 ---
 
 ## Non-Interactive & CI Usage
 
-You can bypass prompts entirely by specifying command-line flags:
+With flags, `fli` asks nothing:
 
 ```bash
 # Example: Download Inter (weights 400 & 700 in WOFF2) for a Next.js project
@@ -75,8 +75,8 @@ npx @dstn/fli \
 | `--css <path>` | Target CSS stylesheet path | Framework default |
 | `--dry-run` | Preview actions without modifying disk or CSS | `false` |
 | `--verbose` | Emit structured per-step logs | `false` |
-| `--version` | Print package version | — |
-| `--help` | Display usage banner | — |
+| `--version` | Print package version | |
+| `--help` | Display usage banner | |
 
 ---
 
@@ -91,23 +91,23 @@ npx @dstn/fli \
 
 ---
 
-## Automated Release & NPM Publishing Workflow
+## Release & npm Publishing
 
-This repository includes fully automated CI/CD workflows for testing and publishing releases:
+Two GitHub workflows test and publish the package.
 
-- **Continuous Integration (`.github/workflows/ci.yml`)**: Automatically runs type checking, linting, build verification, and test suites (`node24`) on every push and pull request.
-- **Automated Releases (`.github/workflows/release.yml`)**: Triggered manually or on tag creation. It:
-  1. Runs clean installation (`npm ci`), type checks, and full unit test verification (`npm test`).
-  2. Resolves the release tag from input or `package.json` version and creates/pushes the git tag automatically.
-  3. Extracts release notes from `CHANGELOG.md` and generates an official GitHub Release via the GitHub CLI (`gh`).
-  4. Automatically publishes `@dstn/fli` to the **npm registry** with cryptographic provenance (`npm publish --provenance --access public`) using **100% tokenless npm Trusted Publishing (OIDC)**. No expiring tokens or secrets required.
+`.github/workflows/ci.yml` runs type checking, linting, the build and the tests (`node24`) on every push and pull request.
+
+`.github/workflows/release.yml` starts on a new tag or by hand. It:
+  1. Installs with `npm ci`, type checks and runs the unit tests (`npm test`).
+  2. Takes the release tag from the input or the `package.json` version and creates and pushes the git tag.
+  3. Extracts the release notes from `CHANGELOG.md` and creates a GitHub Release with the GitHub CLI (`gh`).
+  4. Publishes `@dstn/fli` to npm with provenance (`npm publish --provenance --access public`) through npm Trusted Publishing (OIDC), so no token or secret is stored.
 
 ---
 
-## Documentation & Deep Dive
+## Documentation
 
-Looking for detailed architectural diagrams, API fallback details, or troubleshooting guides?
-Full documentation is in [DOCS.md](DOCS.md).
+Architecture diagrams, the API fallback details and troubleshooting are in [DOCS.md](DOCS.md).
 
 ---
 
